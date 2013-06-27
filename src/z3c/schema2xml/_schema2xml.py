@@ -9,7 +9,8 @@ import zope.datetime
 from zope.location import Location
 from zope.schema import getFieldsInOrder
 from zope.schema.interfaces import IText, IInt, IObject, IList, IChoice, ISet
-from zope.schema.interfaces import IDatetime
+from zope.schema.interfaces import IDatetime, ITextLine, IASCII, IBool
+
 
 def serialize_to_tree(container, schema, instance):
     for name, field in getFieldsInOrder(schema):
@@ -17,12 +18,14 @@ def serialize_to_tree(container, schema, instance):
         IXMLGenerator(field).output(container, value)
     return container
 
+
 def serialize(
         container_name, schema, instance, encoding='UTF-8', pretty_print=True):
     container = etree.Element(container_name)
     container = serialize_to_tree(container, schema, instance)
     return etree.tostring(
         container, encoding=encoding, pretty_print=pretty_print)
+
 
 def deserialize_from_tree(container, schema, instance):
     for element in container:
@@ -32,13 +35,16 @@ def deserialize_from_tree(container, schema, instance):
 
     alsoProvides(instance, schema)
 
+
 def deserialize(xml, schema, instance):
     container = etree.XML(xml)
     deserialize_from_tree(container, schema, instance)
 
+
 class GeneratedObject(Location, Persistent):
     def __init__(self):
         pass
+
 
 class IXMLGenerator(Interface):
 
@@ -49,6 +55,7 @@ class IXMLGenerator(Interface):
     def input(element):
         """Input XML element according to field and return value.
         """
+
 
 class Text(grok.Adapter):
     grok.context(IText)
@@ -63,6 +70,35 @@ class Text(grok.Adapter):
             return unicode(element.text)
         return None
 
+
+class TextLine(grok.Adapter):
+    grok.context(ITextLine)
+    grok.implements(IXMLGenerator)
+
+    def output(self, container, value):
+        element = etree.SubElement(container, self.context.__name__)
+        element.text = value
+
+    def input(self, element):
+        if element.text is not None:
+            return unicode(element.text)
+        return None
+
+
+class ASCII(grok.Adapter):
+    grok.context(IASCII)
+    grok.implements(IXMLGenerator)
+
+    def output(self, container, value):
+        element = etree.SubElement(container, self.context.__name__)
+        element.text = value
+
+    def input(self, element):
+        if element.text is not None:
+            return unicode(element.text)
+        return None
+
+
 class Int(grok.Adapter):
     grok.context(IInt)
     grok.implements(IXMLGenerator)
@@ -76,6 +112,26 @@ class Int(grok.Adapter):
         if element.text is not None and element.text != '':
             return int(element.text)
         return None
+
+
+class Bool(grok.Adapter):
+    grok.context(IBool)
+    grok.implements(IXMLGenerator)
+
+    def output(self, container, value):
+        element = etree.SubElement(container, self.context.__name__)
+        if value is True:
+            element.text = "True"
+        else:
+            element.text = "False"
+
+    def input(self, element):
+        if element.text == "True":
+            return True
+        else:
+            return False
+        return None
+
 
 class Object(grok.Adapter):
     grok.context(IObject)
@@ -92,6 +148,7 @@ class Object(grok.Adapter):
         deserialize_from_tree(element, self.context.schema, instance)
         return instance
 
+
 class List(grok.Adapter):
     grok.context(IList)
     grok.implements(IXMLGenerator)
@@ -99,14 +156,16 @@ class List(grok.Adapter):
     def output(self, container, value):
         container = etree.SubElement(container, self.context.__name__)
         field = self.context.value_type
-        for v in value:
-            IXMLGenerator(field).output(container, v)
+        if len(value) > 0:
+            for v in value:
+                IXMLGenerator(field).output(container, v)
 
     def input(self, element):
         field = self.context.value_type
         return [
             IXMLGenerator(field).input(sub_element)
             for sub_element in element]
+
 
 class Datetime(grok.Adapter):
     grok.context(IDatetime)
@@ -122,10 +181,11 @@ class Datetime(grok.Adapter):
             return zope.datetime.parseDatetimetz(element.text)
         return None
 
+
 class Choice(grok.Adapter):
     grok.context(IChoice)
     grok.implements(IXMLGenerator)
-    
+
     def output(self, container, value):
         element = etree.SubElement(container, self.context.__name__)
         element.text = value
@@ -134,6 +194,7 @@ class Choice(grok.Adapter):
         if element.text is not None:
             return element.text
         return None
+
 
 class Set(grok.Adapter):
     grok.context(ISet)
